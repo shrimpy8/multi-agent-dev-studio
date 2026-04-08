@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent.parent.parent / "config" / "prompts"
-_RETRY_DELAYS = (2, 4, 8)  # seconds; up to 3 retries on HTTP 429
+_RETRY_DELAYS = (2, 4, 8)  # seconds; up to 3 retries on HTTP 429/529
 
 
 def load_prompt(filename: str) -> str:
@@ -121,8 +121,8 @@ def call_llm(model: str, system_prompt: str, user_content: str, node_name: str) 
     """Call an Anthropic model and return the text response.
 
     Retries up to 3 times with exponential backoff (2s, 4s, 8s) on HTTP 429
-    rate-limit errors. Non-429 API errors are not retried. Logs entry, latency,
-    retries, and any terminal errors.
+    (rate limit) and HTTP 529 (overloaded) errors. Other API errors are not
+    retried. Logs entry, latency, retries, and any terminal errors.
 
     Args:
         model: Anthropic model identifier.
@@ -135,6 +135,7 @@ def call_llm(model: str, system_prompt: str, user_content: str, node_name: str) 
 
     Raises:
         anthropic.RateLimitError: If all 3 retries are exhausted on 429.
+        anthropic.APIStatusError: If all 3 retries are exhausted on 529, or immediately on other 4xx/5xx.
         anthropic.APIError: Re-raises any non-retryable Anthropic API error after logging.
     """
     llm = get_llm(model)
@@ -171,13 +172,26 @@ def call_llm(model: str, system_prompt: str, user_content: str, node_name: str) 
                     reason="rate_limit_retries_exhausted",
                 )
                 raise
-            logger.warning(
-                "rate_limit_retry",
-                node=node_name,
-                attempt=attempt,
-                delay_s=delay,
-            )
+            logger.warning("rate_limit_retry", node=node_name, attempt=attempt, delay_s=delay)
             time.sleep(delay)
+        except anthropic.APIStatusError as exc:
+            if exc.status_code == 529:  # Overloaded — transient, safe to retry
+                if delay is None:
+                    latency_ms = int((time.perf_counter() - start) * 1000)
+                    logger.exception(
+                        "llm_call_failed",
+                        node=node_name,
+                        model=model,
+                        latency_ms=latency_ms,
+                        reason="overloaded_retries_exhausted",
+                    )
+                    raise
+                logger.warning("overloaded_retry", node=node_name, attempt=attempt, delay_s=delay)
+                time.sleep(delay)
+            else:
+                latency_ms = int((time.perf_counter() - start) * 1000)
+                logger.exception("llm_call_failed", node=node_name, model=model, latency_ms=latency_ms)
+                raise
         except anthropic.APIError:
             latency_ms = int((time.perf_counter() - start) * 1000)
             logger.exception("llm_call_failed", node=node_name, model=model, latency_ms=latency_ms)

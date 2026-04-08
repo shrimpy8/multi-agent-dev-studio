@@ -5,6 +5,7 @@ and the _build_output_md fallback helper. Imported by src/app.py for the
 Gradio UI and by tests via src.app re-exports.
 """
 
+import html
 import time
 import uuid
 from collections.abc import Generator
@@ -149,20 +150,34 @@ def _render_trace_tab(
     parts: list[str] = ["## 🤖 Agent Trace\n"]
 
     if trace_rows:
-        parts.append("| Time | Agent | Event |")
-        parts.append("|------|-------|-------|")
-        for t, agent, event in trace_rows:
-            safe_event = event.replace("\n", "<br>")
-            parts.append(f"| `{t}` | **{agent}** | {safe_event} |")
+        rows_html = "".join(
+            f"<tr><td><code>{html.escape(t)}</code></td><td><strong>{html.escape(agent)}</strong></td>"
+            f"<td>{html.escape(event).replace(chr(10), '<br>')}</td></tr>"
+            for t, agent, event in trace_rows
+        )
+        parts.append(
+            "<table style='width:100%;table-layout:fixed'>"
+            "<colgroup><col style='width:10%'><col style='width:15%'><col style='width:75%'></colgroup>"
+            "<thead><tr><th>Time</th><th>Agent</th><th>Event</th></tr></thead>"
+            f"<tbody>{rows_html}</tbody></table>"
+        )
     else:
         parts.append("_Starting..._")
 
     if review_rows:
         parts.append(f"\n### Review Trace\n\n**Total Iterations:** {iteration_count}\n")
-        parts.append("| Cycle | Issues Found | Resolution |")
-        parts.append("|-------|-------------|------------|")
-        for cycle, issues, resolution in review_rows:
-            parts.append(f"| {cycle} | {issues} | {resolution} |")
+        rows_html = "".join(
+            f"<tr><td>{html.escape(cycle)}</td>"
+            f"<td>{html.escape(issues).replace(chr(10), '<br>')}</td>"
+            f"<td>{html.escape(resolution)}</td></tr>"
+            for cycle, issues, resolution in review_rows
+        )
+        parts.append(
+            "<table style='width:100%;table-layout:fixed'>"
+            "<colgroup><col style='width:10%'><col style='width:70%'><col style='width:20%'></colgroup>"
+            "<thead><tr><th>Cycle</th><th>Issues Found</th><th>Resolution</th></tr></thead>"
+            f"<tbody>{rows_html}</tbody></table>"
+        )
 
     return "\n".join(parts)
 
