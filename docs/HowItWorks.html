@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<!--
+Document: HowItWorks.html
+Project: multi-agent-dev-studio
+Version: 0.1.0
+Mode: Release
+Last Updated: 2026-04-07
+Generator: project-docs skill
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How It Works | Multi-Agent Dev Studio</title>
+  <style>
+    :root {
+      --primary: #6366f1;
+      --primary-light: #818cf8;
+      --bg: #0f172a;
+      --bg-card: #1e293b;
+      --bg-code: #0d1117;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --border: #334155;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --haiku: #0ea5e9;
+      --sonnet-orch: #a855f7;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+    header { text-align: center; padding: 2.5rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2rem; }
+    header h1 { font-size: 2.2rem; color: var(--primary-light); margin-bottom: 0.5rem; }
+    header p { color: var(--text-muted); font-size: 1.05rem; }
+    .tabs { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; }
+    .tab {
+      padding: 0.5rem 1.25rem; background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 6px; cursor: pointer; font-size: 0.9rem; transition: all 0.15s;
+    }
+    .tab:hover { border-color: var(--primary); color: var(--primary-light); }
+    .tab.active { background: var(--primary); border-color: var(--primary); color: white; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .section {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 1.5rem; margin-bottom: 1.25rem;
+    }
+    .section h2 { font-size: 1.3rem; margin-bottom: 1rem; color: var(--primary-light); }
+    .section h3 { font-size: 1rem; margin: 1rem 0 0.4rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.8rem; }
+    .flow { display: flex; flex-direction: column; gap: 0; }
+    .flow-step { display: flex; gap: 1rem; align-items: flex-start; }
+    .flow-connector { display: flex; flex-direction: column; align-items: center; }
+    .step-num {
+      background: var(--primary); color: white; width: 32px; height: 32px;
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.9rem; flex-shrink: 0;
+    }
+    .step-line { width: 2px; background: var(--border); flex: 1; min-height: 20px; margin: 4px 0; }
+    .step-body { flex: 1; padding-bottom: 1.25rem; }
+    .step-body h3 { font-size: 1rem; color: var(--text); margin-bottom: 0.3rem; }
+    .step-body p { color: var(--text-muted); font-size: 0.95rem; }
+    .badge {
+      display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px;
+      font-size: 0.75rem; font-weight: 600; margin-left: 0.5rem; vertical-align: middle;
+    }
+    .badge-haiku { background: rgba(14,165,233,0.2); color: var(--haiku); }
+    .badge-sonnet-orch { background: rgba(168,85,247,0.2); color: var(--sonnet-orch); }
+    .badge-graph { background: rgba(99,102,241,0.2); color: var(--primary-light); }
+    .state-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; }
+    .state-card {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      padding: 0.75rem; font-size: 0.85rem;
+    }
+    .state-card .state-icon { font-size: 1.2rem; margin-bottom: 0.3rem; }
+    .state-card .state-name { font-weight: 600; margin-bottom: 0.2rem; }
+    .state-card .state-desc { color: var(--text-muted); font-size: 0.8rem; }
+    pre {
+      background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px;
+      padding: 1rem; font-size: 0.82rem; overflow-x: auto; line-height: 1.5;
+      margin-top: 0.75rem; color: #e2e8f0;
+    }
+    code { background: var(--bg-code); padding: 0.15rem 0.35rem; border-radius: 3px; font-size: 0.85rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th { text-align: left; padding: 0.5rem 0.75rem; color: var(--text-muted); border-bottom: 1px solid var(--border); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; }
+    td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    .arch-diagram { font-family: monospace; font-size: 0.8rem; line-height: 1.6; color: #cbd5e1; }
+    .node-sonnet-orch { color: var(--sonnet-orch); font-weight: 700; }
+    .node-haiku { color: var(--haiku); font-weight: 700; }
+    .node-graph { color: var(--primary-light); font-weight: 700; }
+    footer { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.8rem; margin-top: 1rem; border-top: 1px solid var(--border); }
+    ul { padding-left: 1.25rem; }
+    li { margin-bottom: 0.3rem; color: var(--text-muted); font-size: 0.95rem; }
+    li strong { color: var(--text); }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>🤖 Multi-Agent Dev Studio</h1>
+    <p>How the orchestration pipeline works — from feature request to polished implementation</p>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showTab(event, 'user')">For Users</div>
+    <div class="tab" onclick="showTab(event, 'dev')">For Developers</div>
+  </div>
+
+  <!-- ═══════════════════ USER PANEL ═══════════════════ -->
+  <div class="panel active" id="panel-user">
+
+    <div class="section">
+      <h2>What It Does</h2>
+      <p>You type a feature request — like <em>"Add a retry decorator with exponential backoff"</em> — and three Claude AI agents collaborate to produce a complete, reviewed Python implementation through a sequential pipeline. The spec is written and quality-checked before code generation begins. You get a quality-gated feature spec, the code, and a trace of the review process, all in one output.</p>
+    </div>
+
+    <div class="section">
+      <h2>Step by Step</h2>
+      <div class="flow">
+        <div class="flow-step">
+          <div class="flow-connector">
+            <div class="step-num">1</div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-body">
+            <h3>You submit a feature request</h3>
+            <p>Type your request in the input box (up to 2000 characters) and click <strong>Run Pipeline</strong>. The pipeline validates your input instantly — empty or too-long requests are rejected before any API calls are made.</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-connector">
+            <div class="step-num">2</div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-body">
+            <h3>Spec Agent writes the spec</h3>
+            <p>The <strong>Spec Agent</strong> (Claude Haiku) writes a feature spec including a user-value overview, GIVEN/WHEN/THEN acceptance criteria, design decisions, and out-of-scope items. This runs before any code generation.</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-connector">
+            <div class="step-num">3</div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-body">
+            <h3>Spec review gate checks quality</h3>
+            <p>An <strong>Orchestrator</strong> (Claude Sonnet) evaluates the spec against 5 strict criteria: user value articulated, at least 3 GIVEN/WHEN/THEN scenarios including an error case, at least 2 design decisions covering data structures and error handling, plausible out-of-scope exclusions, and internal consistency. If the spec falls short and retries remain, the Spec Agent is asked to revise. Only when the spec passes does code generation begin.</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-connector">
+            <div class="step-num">4</div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-body">
+            <h3>Code Agent generates the implementation</h3>
+            <p>The <strong>Code Agent</strong> (Claude Sonnet) writes a typed Python implementation using the validated spec. On fix cycles, it opens with a <strong>## Issues Addressed</strong> section listing exactly which numbered issues from the reviewer it has fixed.</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-connector">
+            <div class="step-num">5</div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-body">
+            <h3>A reviewer checks alignment and fix claims</h3>
+            <p>The <strong>Review Agent</strong> (Claude Sonnet) checks 8 criteria: spec completeness, code↔spec alignment, type safety, edge cases, no hallucinated imports, DRY, single responsibility, and error handling. Issues are ranked <strong>[P1]</strong> (critical), <strong>[P2]</strong> (important), <strong>[P3]</strong> (polish). On subsequent cycles, the reviewer also verifies each claimed fix from the code agent's ## Issues Addressed section.</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-connector">
+            <div class="step-num">6</div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-body">
+            <h3>Fix cycles run automatically (if needed)</h3>
+            <p>If the reviewer flagged issues, the <strong>Code Agent</strong> re-runs with the numbered issue list. The Code Agent must acknowledge each fix by number. This continues until the code passes review or the iteration cap is reached (default: 1 cycle).</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-connector">
+            <div class="step-num">7</div>
+          </div>
+          <div class="step-body">
+            <h3>Final output delivered</h3>
+            <p>Once approved, a <strong>Synthesis Agent</strong> (Claude Sonnet) combines everything into a structured markdown document: the feature spec, the implementation in a code block, a review trace showing how many cycles it took, and — if the spec had unresolved gaps — a spec gap notes section.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>UI States</h2>
+      <div class="state-grid">
+        <div class="state-card">
+          <div class="state-icon">📝</div>
+          <div class="state-name">Empty</div>
+          <div class="state-desc">Input box + example prompts. Click an example to pre-fill.</div>
+        </div>
+        <div class="state-card">
+          <div class="state-icon">⏳</div>
+          <div class="state-name">Loading</div>
+          <div class="state-desc">Live status showing current phase — "Spec gate: review cycle 1", "Generating code…", "Review cycle 1"</div>
+        </div>
+        <div class="state-card">
+          <div class="state-icon">✅</div>
+          <div class="state-name">Success</div>
+          <div class="state-desc">Full spec + code + review trace. Shows cycle count.</div>
+        </div>
+        <div class="state-card">
+          <div class="state-icon">⚠️</div>
+          <div class="state-name">Max Cycles</div>
+          <div class="state-desc">Output shown with warning banner — review cap was hit.</div>
+        </div>
+        <div class="state-card">
+          <div class="state-icon">🔴</div>
+          <div class="state-name">Error</div>
+          <div class="state-desc">Input invalid or API failure. Message tells you what to fix.</div>
+        </div>
+        <div class="state-card">
+          <div class="state-icon">🟡</div>
+          <div class="state-name">Partial</div>
+          <div class="state-desc">One agent succeeded. Shows available output + error note.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Tips</h2>
+      <ul>
+        <li><strong>Be specific</strong> — "Add a retry decorator with exponential backoff and max retries" produces better output than "add retries". More specific requests also pass the spec gate on the first attempt.</li>
+        <li><strong>Focused scope</strong> — the pipeline is designed for self-contained Python modules or HTML/JS components. Full applications ("build a CRM") will be rejected by the scope guardrail.</li>
+        <li><strong>Max iterations</strong> — if you see the warning banner, the output is still useful — just not fully reviewed. Submit again with a more focused request.</li>
+        <li><strong>Spec gap notes</strong> — if the spec review budget is exhausted without full approval, the final output will include a spec gap notes section describing what remained unresolved.</li>
+        <li><strong>Example prompts</strong> — click any example below the input box to pre-fill it.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ DEV PANEL ═══════════════════ -->
+  <div class="panel" id="panel-dev">
+
+    <div class="section">
+      <h2>Architecture</h2>
+      <pre class="arch-diagram">
+User Input (feature_request: str, ≤ 2000 chars)
+        │  validate_input: injection + scope guardrails
+        ▼
+<span class="node-graph">orchestrate</span>   ← pure dispatcher, no LLM call
+        │  Command(goto="spec_agent")
+        ▼
+<span class="node-haiku">spec_agent</span>    ← Claude Haiku, writes spec
+        │
+        ▼
+<span class="node-sonnet-orch">spec_review</span>   ← Claude Sonnet, 5-criteria spec quality gate
+        │
+   ┌────┴──────────────────────────────────┐
+   │ gaps + retries remain                 │ approved OR budget exhausted
+   ▼                                       ▼
+[back to spec_agent]               <span class="node-haiku">code_agent</span>   ← Claude Sonnet, generates code
+                                           │  (receives spec_gap_notes if gate exhausted)
+                                           │  On fix cycles: opens with ## Issues Addressed
+                                           ▼
+                                   <span class="node-sonnet-orch">review</span>        ← Claude Sonnet, 8-criteria check
+                                           │  Issues: numbered [P1]/[P2]/[P3]
+                                           │  Verifies CLAIMED FIXES in subsequent cycles
+                                           │  _route_after_review (conditional edge)
+                                      ┌────┴──────────────┐
+                                      │ issues?           │ approved OR cap hit
+                                      ▼                   ▼
+                              <span class="node-graph">fix_dispatch</span>    <span class="node-sonnet-orch">synthesize</span>   ← Claude Sonnet, markdown delivery
+                                      │  always → code_agent        (includes spec_gap_notes)
+                                      └──► <span class="node-haiku">code_agent</span> → <span class="node-sonnet-orch">review</span>
+      </pre>
+    </div>
+
+    <div class="section">
+      <h2>Key Design Decisions</h2>
+      <table>
+        <thead><tr><th>Decision</th><th>Choice</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr><td>Execution order</td><td>Sequential pipeline (spec → spec_review gate → code → review)</td><td>Spec must be validated before code generation. Parallel fan-out produced lower-quality code because code_agent had no reviewed spec to work from.</td></tr>
+          <tr><td>Model tiers</td><td>Sonnet orchestrator (spec_review + review + synthesis), Haiku spec agent, Sonnet code agent</td><td>Spec writing requires less judgment (Haiku sufficient). Code generation requires stronger synthesis (Sonnet needed — Haiku produced truncated output and undefined function errors). Review/judge tasks use Sonnet — same model as code but highest context utilization.</td></tr>
+          <tr><td>Review feedback</td><td>Numbered [P1]/[P2]/[P3] issues + acknowledgement tracking</td><td>Code agent references issues by number in ## Issues Addressed; reviewer verifies each claim in the next cycle. Prevents silent non-fixes.</td></tr>
+          <tr><td>State schema</td><td>Custom <code>AgentState</code> TypedDict</td><td>Task-output-centric; maps cleanly to the domain vs. message-centric <code>MessagesState</code></td></tr>
+          <tr><td>UI framework</td><td>Gradio Blocks</td><td>Lowest friction for Python-native demo; streaming generators for live updates; no separate frontend process</td></tr>
+          <tr><td>Secret handling</td><td>Pydantic <code>SecretStr</code></td><td>API key never appears in logs, repr, or model serialization</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Graph State</h2>
+      <pre>
+class AgentState(TypedDict):
+    feature_request:         str                            # user input
+    spec_output:             SubAgentOutput | None          # latest spec
+    code_output:             SubAgentOutput | None          # latest code
+    review_feedback:         ReviewFeedback | None          # latest review
+    iteration_count:         int                            # increments each review cycle
+    spec_review_iteration:   int                            # increments each spec gate retry
+    spec_gap_notes:          str                            # unresolved spec gaps (if gate exhausted)
+    code_fix_acknowledgement: str                           # ## Issues Addressed section from code_agent
+    final_output:            str | None                     # set by synthesize
+    status:                  Literal["running",
+                                     "approved",
+                                     "max_iterations_reached"]
+    review_history:          Annotated[list[ReviewFeedback],
+                                       operator.add]        # append-only across cycles
+      </pre>
+      <p style="color:var(--text-muted);margin-top:0.5rem;font-size:0.85rem;">Each node returns only the keys it produces — e.g. <code>{"code_output": ..., "code_fix_acknowledgement": ...}</code>.</p>
+    </div>
+
+    <div class="section">
+      <h2>Resilience Patterns</h2>
+      <table>
+        <thead><tr><th>Pattern</th><th>Location</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td>Rate-limit retry</td><td><code>src/agents/base.py</code></td><td>3× retry on HTTP 429 — delays 2s, 4s, 8s. Only <code>RateLimitError</code> is retried; other <code>APIError</code> subclasses propagate immediately.</td></tr>
+          <tr><td>HTTP timeout</td><td><code>src/agents/base.py</code></td><td>Configurable via <code>LLM_TIMEOUT_SECONDS</code> (default 120s). Passed directly to <code>ChatAnthropic</code>.</td></tr>
+          <tr><td>LLM client caching</td><td><code>src/agents/base.py</code></td><td><code>@lru_cache(maxsize=4)</code> on <code>get_llm(model)</code> — HTTP client pool reused per model string.</td></tr>
+          <tr><td>JSON parse retry</td><td><code>src/agents/review.py</code></td><td>Review response retried once on <code>JSONDecodeError</code>. If second attempt also fails, treated as approved and <code>status="max_iterations_reached"</code> is set.</td></tr>
+          <tr><td>Prompt injection guard</td><td><code>src/agents/base.py</code></td><td><code>sanitize_for_format()</code> escapes <code>{</code>/<code>}</code> in user input before <code>.format()</code> interpolation.</td></tr>
+          <tr><td>Iteration cap</td><td><code>src/graph/graph.py</code></td><td><code>_route_after_review</code> checks both <code>state["status"]</code> and <code>iteration_count >= max_review_iterations</code> — double guard.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Adding a New Agent Node</h2>
+      <div class="flow">
+        <div class="flow-step">
+          <div class="flow-connector"><div class="step-num">1</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <h3>Add a prompt file</h3>
+            <p>Create <code>config/prompts/my_agent_prompt.txt</code>. Use <code>{feature_request}</code> and <code>{feedback_section}</code> as placeholders. Call <code>sanitize_for_format(state["feature_request"])</code> before interpolation.</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-connector"><div class="step-num">2</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <h3>Write the node function</h3>
+            <p>Return only the keys you produce: <code>return {"my_output": output}</code>. Import <code>call_llm</code>, <code>load_prompt</code>, and <code>build_feedback_section</code> from <code>src.agents.base</code>.</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-connector"><div class="step-num">3</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <h3>Add the field to AgentState</h3>
+            <p>Add <code>my_output: MyOutput | None</code> to <code>AgentState</code> in <code>src/state/state.py</code>.</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-connector"><div class="step-num">4</div></div>
+          <div class="step-body">
+            <h3>Wire it into the graph</h3>
+            <p>Register with <code>builder.add_node()</code> and connect with <code>builder.add_edge()</code> or <code>builder.add_conditional_edges()</code> in <code>src/graph/graph.py</code>.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Key Files Quick Reference</h2>
+      <table>
+        <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>src/graph/graph.py</code></td><td>Graph topology, conditional routing, compiled <code>graph</code> singleton</td></tr>
+          <tr><td><code>src/agents/base.py</code></td><td><code>call_llm</code>, <code>get_llm</code>, <code>load_prompt</code>, <code>build_feedback_section</code>, <code>sanitize_for_format</code></td></tr>
+          <tr><td><code>src/state/state.py</code></td><td><code>AgentState</code> TypedDict — the single shared state object</td></tr>
+          <tr><td><code>src/config/settings.py</code></td><td><code>OrchestratorConfig</code> — all runtime config, validated at startup</td></tr>
+          <tr><td><code>src/pipeline.py</code></td><td>Streaming logic, <code>validate_input</code>, <code>_build_output_md</code>, <code>run_pipeline</code>, per-node handlers, <code>_StreamState</code></td></tr>
+          <tr><td><code>src/app.py</code></td><td>Gradio UI entry point — Blocks layout, tab renderers; delegates pipeline logic to <code>pipeline.py</code></td></tr>
+          <tr><td><code>src/agents/spec_review.py</code></td><td>Spec quality gate node — 5-criteria Sonnet check, routes back to spec_agent or forward to code_agent</td></tr>
+          <tr><td><code>config/prompts/</code></td><td>All system prompts — never inline strings in source code</td></tr>
+          <tr><td><code>tests/test_integration.py</code></td><td>9 SPEC scenarios end-to-end, all mocked — the canonical acceptance test suite</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    <p>multi-agent-dev-studio • v0.1.0 • 2026-04-07</p>
+    <p>Generated by project-docs skill</p>
+  </footer>
+</div>
+<script>
+  function showTab(event, name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('panel-' + name).classList.add('active');
+  }
+</script>
+</body>
+</html>

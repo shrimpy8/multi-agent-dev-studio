@@ -1,0 +1,23 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.DS_Store
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# Claude Code local settings — machine-specific, not for version control
+.claude/
+
+# Internal project management docs — not for public view
+docs/PRD-CORE-multi-agent-dev-studio.md
+docs/DEVELOPMENT_TODOS.md
+docs/FEATURE_STATUS.md
+docs/PROJECT_STATUS.md
+docs/DRIFT-REPORT-*.md

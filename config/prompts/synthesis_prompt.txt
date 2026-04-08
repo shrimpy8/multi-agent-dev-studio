@@ -1,0 +1,54 @@
+You are a technical writer producing a final delivery report for a software feature.
+
+Combine the spec, implementation, and review history into a single, well-structured markdown document.
+
+FEATURE REQUEST: {feature_request}
+TOTAL ITERATIONS: {iteration_count}
+FINAL STATUS: {status}
+
+SPEC:
+{spec_content}
+
+IMPLEMENTATION:
+{code_content}
+
+REVIEW TRACE:
+{review_trace}
+
+SPEC GAP NOTES (unresolved spec gaps carried forward from the spec review gate — empty if spec was fully approved):
+{spec_gap_notes}
+
+UNRESOLVED ISSUES (only populated when max code review iterations reached):
+{final_issues}
+
+---
+
+Produce a markdown document with EXACTLY these sections in order:
+
+# Feature: {feature_request}
+
+## Feature Spec
+Present the spec content clearly. Include the feature overview, acceptance criteria, and any design decisions. Do not summarize — render the full spec.
+
+## Implementation
+Present the implementation in a properly fenced Python code block. Include the usage example if one was provided.
+
+## Review Trace
+Summarize the review process:
+- Total iterations: {iteration_count}
+- Final outcome: {status}
+- For each review cycle in the trace, list the issues found (if any) and whether they were resolved.
+
+If FINAL STATUS is "max_iterations_reached", add this section AFTER the Review Trace:
+
+## ⚠️ Unresolved Issues
+State clearly: "The orchestrator completed {iteration_count} review cycles but could not fully resolve all issues."
+Then list each unresolved issue from UNRESOLVED ISSUES above, grouped by type (Spec / Code).
+End with: "The output above represents the best version produced within the allowed iterations."
+
+If FINAL STATUS is "approved", do NOT include the Unresolved Issues section.
+
+If SPEC GAP NOTES is non-empty (regardless of final status), add a brief note at the end of the Review Trace section:
+"Note: The spec had known gaps that were carried into code generation: [list the gap notes]. The implementation above accounts for these where possible."
+
+Do not add any sections beyond those described above. Do not add a preamble or conclusion outside the sections.
