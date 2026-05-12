@@ -222,7 +222,7 @@ No separate error tracking service. All errors are logged with `logger.exception
 multi-agent-dev-studio/
 ├── src/
 │   ├── agents/          # Graph node functions
-│   │   ├── base.py      # Shared: call_llm, get_llm (cached), build_feedback_section, sanitize_for_format
+│   │   ├── base.py      # Shared: call_llm, get_llm (cached), extract_json, build_feedback_section, sanitize_for_format, _clear_caches
 │   │   ├── orchestrate.py
 │   │   ├── spec_agent.py
 │   │   ├── spec_review.py   # Spec quality gate — 5-criteria Sonnet check, routes back or forward
@@ -249,7 +249,7 @@ multi-agent-dev-studio/
 │       ├── code_prompt.txt          # Sonnet code prompt (DRY, single responsibility, error handling)
 │       ├── review_prompt.txt
 │       └── synthesis_prompt.txt
-├── tests/               # 117 tests, all LLM calls mocked
+├── tests/               # 150 tests, all LLM calls mocked
 ├── docs/                # Project documentation
 ├── .env                 # Local config (gitignored)
 ├── .env.example         # Config template

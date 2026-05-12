@@ -7,41 +7,14 @@ approved to avoid blocking the pipeline indefinitely.
 """
 
 import json
-import re
 
-from src.agents.base import call_llm, load_prompt, sanitize_for_format
+from src.agents.base import call_llm, extract_json, load_prompt, sanitize_for_format
 from src.config.logging import get_logger
 from src.config.settings import get_settings
 from src.state.models import ReviewFeedback
 from src.state.state import AgentState
 
 logger = get_logger(__name__)
-
-
-def _extract_json(raw: str) -> str:
-    """Strip markdown fences from an LLM response and return the bare JSON string.
-
-    Models sometimes wrap JSON in ```json...``` or ```...``` blocks despite
-    being instructed not to. This handles all common fence formats.
-
-    Args:
-        raw: Raw LLM response text, possibly wrapped in markdown fences.
-
-    Returns:
-        The JSON string with fences removed.
-    """
-    stripped = raw.strip()
-    # Strip ```json ... ``` or ``` ... ``` fences
-    if stripped.startswith("```"):
-        lines = stripped.splitlines()
-        end = next((i for i, ln in enumerate(lines[1:], 1) if ln.strip() == "```"), len(lines))
-        stripped = "\n".join(lines[1:end]).strip()
-    # Last-resort: extract the first {...} block if still no leading brace
-    if not stripped.startswith("{"):
-        match = re.search(r"\{.*\}", stripped, re.DOTALL)
-        if match:
-            stripped = match.group(0)
-    return stripped
 
 
 def _parse_review_json(raw: str, iteration: int) -> ReviewFeedback:
@@ -58,7 +31,7 @@ def _parse_review_json(raw: str, iteration: int) -> ReviewFeedback:
         json.JSONDecodeError: If the response is not valid JSON.
         ValueError: If the parsed JSON does not match the ReviewFeedback schema.
     """
-    data = json.loads(_extract_json(raw))
+    data = json.loads(extract_json(raw))
     # Ensure iteration is set correctly from state, not from LLM output
     data["iteration"] = iteration
     return ReviewFeedback(**data)

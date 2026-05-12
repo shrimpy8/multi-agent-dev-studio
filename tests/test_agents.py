@@ -48,7 +48,7 @@ class TestSpecAgent:
     @patch("src.agents.spec_agent.call_llm", return_value="spec content")
     def test_iteration_propagated(self, mock_llm: MagicMock) -> None:
         state = _base_state()
-        state["iteration_count"] = 2
+        state["spec_review_iteration"] = 2  # spec_agent tracks spec_review_iteration, not iteration_count
         result = spec_agent(state)
         assert result["spec_output"].iteration == 2
 

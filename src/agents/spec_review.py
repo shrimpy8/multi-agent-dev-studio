@@ -13,31 +13,16 @@ synthesis report are aware of the known limitations.
 """
 
 import json
-import re
 
 from langgraph.types import Command
 
-from src.agents.base import call_llm, load_prompt, sanitize_for_format
+from src.agents.base import call_llm, extract_json, load_prompt, sanitize_for_format
 from src.config.logging import get_logger
 from src.config.settings import get_settings
 from src.state.models import ReviewFeedback, SpecReviewFeedback
 from src.state.state import AgentState
 
 logger = get_logger(__name__)
-
-
-def _extract_json(raw: str) -> str:
-    """Strip markdown fences from LLM response and return the bare JSON string."""
-    stripped = raw.strip()
-    if stripped.startswith("```"):
-        lines = stripped.splitlines()
-        end = next((i for i, ln in enumerate(lines[1:], 1) if ln.strip() == "```"), len(lines))
-        stripped = "\n".join(lines[1:end]).strip()
-    if not stripped.startswith("{"):
-        match = re.search(r"\{.*\}", stripped, re.DOTALL)
-        if match:
-            stripped = match.group(0)
-    return stripped
 
 
 def _parse_spec_review_json(raw: str, iteration: int) -> SpecReviewFeedback:
@@ -54,7 +39,7 @@ def _parse_spec_review_json(raw: str, iteration: int) -> SpecReviewFeedback:
         json.JSONDecodeError: If the response is not valid JSON.
         ValueError: If the JSON does not match the SpecReviewFeedback schema.
     """
-    data = json.loads(_extract_json(raw))
+    data = json.loads(extract_json(raw))
     data["iteration"] = iteration
     return SpecReviewFeedback(**data)
 

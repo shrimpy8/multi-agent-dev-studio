@@ -26,7 +26,7 @@ def spec_agent(state: AgentState) -> AgentState:
         Updated state with spec_output populated from the LLM response.
     """
     cfg = get_settings()
-    iteration = state.get("iteration_count", 0)
+    iteration = state.get("spec_review_iteration", 0)
     logger.info("spec_agent_start", iteration=iteration)
 
     prompt_template = load_prompt("spec_prompt.txt")

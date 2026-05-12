@@ -22,6 +22,8 @@ def configure_logging() -> None:
     Emits JSON-formatted log records to stderr.
     Must be called once at application startup before any logging occurs.
     """
+    # Direct env read: logging must be configured before OrchestratorConfig loads
+    # (which validates ANTHROPIC_API_KEY), so settings can't be used here.
     log_level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
     log_level = getattr(logging, log_level_name, logging.INFO)
 

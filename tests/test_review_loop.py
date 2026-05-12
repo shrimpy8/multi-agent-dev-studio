@@ -11,8 +11,9 @@ from unittest.mock import MagicMock, call, patch
 import anthropic
 import pytest
 
+from src.agents.base import extract_json as _extract_json
 from src.agents.fix_dispatch import fix_dispatch
-from src.agents.review import _extract_json, _parse_review_json, review
+from src.agents.review import _parse_review_json, review
 from src.agents.spec_review import _parse_spec_review_json, spec_review
 from src.agents.synthesize import _build_review_trace, synthesize
 from src.graph.graph import graph

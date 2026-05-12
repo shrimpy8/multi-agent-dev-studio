@@ -165,7 +165,7 @@ class OrchestratorConfig(BaseModel):
 | `feature_request` | Max 2000 chars; non-empty; no injection patterns; no scope keywords | Strip leading/trailing whitespace; `sanitize_for_format()` before template interpolation |
 | `MAX_REVIEW_ITERATIONS` | Integer 1–3; reject outside range | Default to 1 if unset |
 | `MAX_SPEC_REVIEW_ITERATIONS` | Integer 1–3; reject outside range | Default to 1 if unset |
-| Model name env vars | Must match known Anthropic model IDs | Validated at startup via config class |
+| Model name env vars | Must start with `claude-`; non-empty | `@field_validator` in `OrchestratorConfig` rejects invalid names at startup |
 | LLM outputs (spec/code content) | N/A — not trusted as code | `sanitize_for_format()` applied before all `.format()` calls in review.py and synthesize.py |
 
 ### Data Protection

@@ -263,7 +263,7 @@ User Input (feature_request: str, ≤ 2000 chars)
    ┌────┴──────────────────────────────────┐
    │ gaps + retries remain                 │ approved OR budget exhausted
    ▼                                       ▼
-[back to spec_agent]               <span class="node-haiku">code_agent</span>   ← Claude Sonnet, generates code
+[back to spec_agent]               <span class="node-sonnet-orch">code_agent</span>   ← Claude Sonnet, generates code
                                            │  (receives spec_gap_notes if gate exhausted)
                                            │  On fix cycles: opens with ## Issues Addressed
                                            ▼
@@ -276,7 +276,7 @@ User Input (feature_request: str, ≤ 2000 chars)
                                       ▼                   ▼
                               <span class="node-graph">fix_dispatch</span>    <span class="node-sonnet-orch">synthesize</span>   ← Claude Sonnet, markdown delivery
                                       │  always → code_agent        (includes spec_gap_notes)
-                                      └──► <span class="node-haiku">code_agent</span> → <span class="node-sonnet-orch">review</span>
+                                      └──► <span class="node-sonnet-orch">code_agent</span> → <span class="node-sonnet-orch">review</span>
       </pre>
     </div>
 

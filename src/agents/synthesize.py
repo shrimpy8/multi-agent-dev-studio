@@ -77,7 +77,7 @@ def synthesize(state: AgentState) -> dict:
 
     prompt_template = load_prompt("synthesis_prompt.txt")
     system_prompt = prompt_template.format(
-        feature_request=state["feature_request"],
+        feature_request=sanitize_for_format(state["feature_request"]),
         iteration_count=iteration,
         status=final_status,
         spec_content=spec_content,

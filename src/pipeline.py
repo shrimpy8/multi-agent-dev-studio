@@ -6,11 +6,15 @@ Gradio UI and by tests via src.app re-exports.
 """
 
 import html
+import re
 import time
 import uuid
 from collections.abc import Generator
 from dataclasses import dataclass, field
 from typing import Any
+
+import anthropic
+import structlog.contextvars
 
 from src.config.constants import MAX_FEATURE_REQUEST_LEN
 from src.config.logging import get_logger
@@ -34,7 +38,9 @@ _INJECTION_PATTERNS: tuple[str, ...] = (
     "override instructions",
 )
 
-# Phrases that signal a request is too broad for this tool
+# Regex patterns that signal a request is too broad for this tool.
+# Use word boundaries (\b) for abbreviations to avoid space-padding gaps
+# (e.g., " erp " misses "build an ERP" at end-of-string or "ERP/CRM").
 _SCOPE_PATTERNS: tuple[str, ...] = (
     "full application",
     "entire application",
@@ -42,8 +48,8 @@ _SCOPE_PATTERNS: tuple[str, ...] = (
     "full-stack",
     "full stack",
     "fullstack",
-    " erp ",
-    " crm ",
+    r"\berp\b",
+    r"\bcrm\b",
     "operating system",
     "entire system",
     "complete system",
@@ -82,7 +88,7 @@ def validate_input(text: str) -> str | None:
             )
 
     for pattern in _SCOPE_PATTERNS:
-        if pattern in lower:
+        if re.search(pattern, lower):
             return (
                 "This tool generates focused, self-contained Python modules or HTML/JS components — "
                 "not full applications. Please describe one specific feature "
@@ -133,6 +139,10 @@ def _build_output_md(state: dict[str, Any]) -> str:
         trace_lines.append(f"- Iteration {fb.iteration}: {verdict}")
     parts.append("\n## Review Trace\n" + "\n".join(trace_lines))
 
+    spec_gap_notes = state.get("spec_gap_notes", "")
+    if spec_gap_notes:
+        parts.append(f"\n## Known Spec Limitations\n{spec_gap_notes}")
+
     return "\n".join(parts)
 
 
@@ -182,28 +192,41 @@ def _render_trace_tab(
     return "\n".join(parts)
 
 
-def _render_spec_tab(spec_iterations: list[tuple[int, str]], model: str) -> str:
-    """Render the Feature Spec section — all iterations, oldest first."""
-    parts: list[str] = [f"## 📋 Feature Spec\n\n_Spec Agent · `{model}`_\n"]
-    if not spec_iterations:
-        parts.append("_Waiting for Spec Agent..._")
+def _render_iteration_tab(
+    title: str,
+    waiting_msg: str,
+    iterations: list[tuple[int, str]],
+    model: str,
+) -> str:
+    """Render a tab showing all LLM iterations, oldest first."""
+    parts: list[str] = [f"{title}\n\n_{model}_\n"]
+    if not iterations:
+        parts.append(waiting_msg)
         return "\n".join(parts)
-    for idx, (iteration, content) in enumerate(spec_iterations):
+    for idx, (iteration, content) in enumerate(iterations):
         label = "### Initial Draft" if idx == 0 else f"### Revision {iteration}"
         parts.append(f"{label}\n\n{content}")
     return "\n\n---\n\n".join(parts) if len(parts) > 1 else "\n".join(parts)
+
+
+def _render_spec_tab(spec_iterations: list[tuple[int, str]], model: str) -> str:
+    """Render the Feature Spec section — all iterations, oldest first."""
+    return _render_iteration_tab(
+        "## 📋 Feature Spec",
+        "_Waiting for Spec Agent..._",
+        spec_iterations,
+        f"Spec Agent · `{model}`",
+    )
 
 
 def _render_code_tab(code_iterations: list[tuple[int, str]], model: str) -> str:
     """Render the Implementation section — all iterations, oldest first."""
-    parts: list[str] = [f"## 💻 Implementation\n\n_Code Agent · `{model}`_\n"]
-    if not code_iterations:
-        parts.append("_Waiting for Code Agent..._")
-        return "\n".join(parts)
-    for idx, (iteration, content) in enumerate(code_iterations):
-        label = "### Initial Draft" if idx == 0 else f"### Revision {iteration}"
-        parts.append(f"{label}\n\n{content}")
-    return "\n\n---\n\n".join(parts) if len(parts) > 1 else "\n".join(parts)
+    return _render_iteration_tab(
+        "## 💻 Implementation",
+        "_Waiting for Code Agent..._",
+        code_iterations,
+        f"Code Agent · `{model}`",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -261,10 +284,8 @@ def _on_spec_review(update: dict[str, Any], ss: _StreamState, cfg: Any, feature_
             f"⚠️ Spec gate — gaps remain after {spec_review_iter} attempt(s), "
             "proceeding to Code Agent with known limitations noted",
         )
-    elif spec_review_iter and spec_review_iter > 0:
+    elif spec_review_iter > 0:
         ss.add_trace("Orchestrator", f"✅ Spec gate passed (attempt {spec_review_iter})")
-    else:
-        ss.add_trace("Orchestrator", "🔍 Reviewing spec…")
     trace_md, spec_md, code_md = ss.tabs(cfg)
     return (_status_md("Running pipeline…"), f"## Feature: {feature_request}", trace_md, spec_md, code_md, "")
 
@@ -376,6 +397,9 @@ def run_pipeline(
         return
 
     feature_request = feature_request.strip()
+    # Bind request_id to structlog context so all agent logs in this request carry it
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(request_id=request_id)
     logger.info("pipeline_start", request_id=request_id, feature_len=len(feature_request))
 
     ss = _StreamState()
@@ -416,6 +440,45 @@ def run_pipeline(
                 if handler:
                     yield handler(update)
 
+    except anthropic.AuthenticationError:
+        logger.exception("pipeline_error", request_id=request_id, reason="auth")
+        ss.add_trace("Pipeline", "❌ Authentication error — check your API key")
+        trace_md, spec_md, code_md = ss.tabs(cfg)
+        yield (
+            _status_md("Invalid API key. Set ANTHROPIC_API_KEY and restart.", error=True),
+            "",
+            trace_md,
+            spec_md,
+            code_md,
+            "",
+        )
+        return
+    except anthropic.RateLimitError:
+        logger.exception("pipeline_error", request_id=request_id, reason="rate_limit")
+        ss.add_trace("Pipeline", "❌ Rate limit exceeded — all retries exhausted")
+        trace_md, spec_md, code_md = ss.tabs(cfg)
+        yield (
+            _status_md("Rate limit exceeded. Please wait a moment and try again.", error=True),
+            "",
+            trace_md,
+            spec_md,
+            code_md,
+            "",
+        )
+        return
+    except anthropic.APIStatusError as exc:
+        logger.exception("pipeline_error", request_id=request_id, status_code=exc.status_code)
+        ss.add_trace("Pipeline", f"❌ API error (HTTP {exc.status_code})")
+        trace_md, spec_md, code_md = ss.tabs(cfg)
+        yield (
+            _status_md(f"API error (HTTP {exc.status_code}). Please try again.", error=True),
+            "",
+            trace_md,
+            spec_md,
+            code_md,
+            "",
+        )
+        return
     except Exception:
         logger.exception("pipeline_error", request_id=request_id)
         ss.add_trace("Pipeline", "❌ Error occurred")

@@ -25,7 +25,7 @@ class OrchestratorConfig(BaseSettings):
         orchestrator_model: Claude model for the orchestrator (review + synthesis).
         spec_agent_model: Claude model for the spec agent.
         code_agent_model: Claude model for the code agent.
-        max_review_iterations: Maximum review cycles before force-completing. Must be 1–10.
+        max_review_iterations: Maximum review cycles before force-completing. Must be 1–3.
         max_tokens: Maximum tokens per LLM response.
         llm_timeout_seconds: HTTP timeout for Anthropic API calls.
         log_level: Logging verbosity. Passed to structlog configuration.
@@ -92,6 +92,24 @@ class OrchestratorConfig(BaseSettings):
             raise ValueError("ANTHROPIC_API_KEY is required. Set it in .env or the environment.")
         return v
 
+    @field_validator("orchestrator_model", "spec_agent_model", "code_agent_model")
+    @classmethod
+    def model_name_valid(cls, v: str) -> str:
+        """Validate model names start with 'claude-' to catch typos at startup.
+
+        Args:
+            v: The model name string.
+
+        Returns:
+            The validated model name.
+
+        Raises:
+            ValueError: If the name is empty or doesn't start with 'claude-'.
+        """
+        if not v or not v.strip().startswith("claude-"):
+            raise ValueError(f"Model name must start with 'claude-', got: {v!r}")
+        return v.strip()
+
     @field_validator("max_review_iterations", "max_spec_review_iterations")
     @classmethod
     def iterations_in_range(cls, v: int) -> int:
@@ -104,11 +122,24 @@ class OrchestratorConfig(BaseSettings):
             The validated iterations value.
 
         Raises:
-            ValueError: If outside the range 1–10.
+            ValueError: If outside the range 1–3.
         """
         if not 1 <= v <= 3:
             raise ValueError("Iteration cap must be between 1 and 3")
         return v
+
+
+def reset_settings() -> None:
+    """Clear the settings cache and LLM client cache.
+
+    Call this in test teardown when env vars change between tests.
+    Also use when rotating API keys — both caches must be cleared together
+    since get_llm captures the key from settings at creation time.
+    """
+    get_settings.cache_clear()
+    from src.agents.base import get_llm
+
+    get_llm.cache_clear()
 
 
 @lru_cache(maxsize=1)

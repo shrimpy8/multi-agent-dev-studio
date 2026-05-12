@@ -35,13 +35,13 @@ def orchestrate(state: AgentState) -> Command:
         iteration=state.get("iteration_count", 0),
     )
 
-    # Initialise state fields not yet set
-    initialised: AgentState = {
-        **state,
-        "iteration_count": state.get("iteration_count") or 0,
-        "status": "running",
-        "review_history": state.get("review_history") or [],
-    }
-
-    # Sequential pipeline: spec first, code uses the spec, then review.
-    return Command(goto="spec_agent", update=initialised)
+    # Only send the fields this node owns. Spreading **state would push the full
+    # review_history back into LangGraph's reducer on every entry, potentially
+    # doubling it if orchestrate were ever re-entered.
+    return Command(
+        goto="spec_agent",
+        update={
+            "iteration_count": state.get("iteration_count") or 0,
+            "status": "running",
+        },
+    )

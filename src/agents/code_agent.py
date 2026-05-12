@@ -21,18 +21,39 @@ logger = get_logger(__name__)
 def _split_acknowledgement(content: str) -> tuple[str, str]:
     """Split '## Issues Addressed' header from the rest of the code output.
 
+    Matches the acknowledgement section up to (but not including) the next '## '
+    header. When no second header is present, requires a blank line after the
+    bullet list before treating remaining content as implementation — this
+    prevents swallowing the entire response as acknowledgement when the LLM
+    omits the second header.
+
     Args:
         content: Raw LLM response, possibly starting with an acknowledgement section.
 
     Returns:
         (acknowledgement, implementation) — acknowledgement is empty string if not present.
     """
-    match = re.search(r"^## Issues Addressed\s*\n(.*?)(?=\n## |\Z)", content.strip(), re.DOTALL)
-    if not match:
-        return "", content
-    ack = match.group(1).strip()
-    rest = content[match.end() :].strip()
-    return ack, rest
+    stripped = content.strip()
+    # Match the acknowledgement section; stop at the next '## ' header
+    header_match = re.search(r"^## Issues Addressed\s*\n(.*?)(?=\n## )", stripped, re.DOTALL)
+    if header_match:
+        ack = header_match.group(1).strip()
+        rest = stripped[header_match.end() :].strip()
+        return ack, rest
+
+    # No second '## ' header — extract only bullet/list lines after '## Issues Addressed'
+    # (stop at the first blank line after the list to avoid eating implementation prose)
+    fallback = re.search(
+        r"^## Issues Addressed\s*\n((?:[ \t]*[-*\d].*\n?)+)",
+        stripped,
+        re.DOTALL | re.MULTILINE,
+    )
+    if fallback:
+        ack = fallback.group(1).strip()
+        rest = stripped[fallback.end() :].strip()
+        return ack, rest
+
+    return "", content
 
 
 def code_agent(state: AgentState) -> AgentState:

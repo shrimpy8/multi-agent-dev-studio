@@ -23,7 +23,10 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent.parent.parent / "config" / "prompts"
-_RETRY_DELAYS = (2, 4, 8)  # seconds; up to 3 retries on HTTP 429/529
+# Retry delays in seconds for HTTP 429/529. Uses time.sleep (blocking) — in Gradio the
+# worker thread freezes during retries (up to 14s total) but no event-loop deadlock occurs
+# since Gradio runs generators synchronously. An async variant would need asyncio.sleep.
+_RETRY_DELAYS = (2, 4, 8)
 
 
 def load_prompt(filename: str) -> str:
@@ -57,6 +60,53 @@ def sanitize_for_format(text: str) -> str:
         String with ``{`` replaced by ``{{`` and ``}`` by ``}}``.
     """
     return text.replace("{", "{{").replace("}", "}}")
+
+
+def _find_last_json_object(text: str) -> str | None:
+    """Return the last balanced {...} block in text, or None if not found.
+
+    Uses brace counting from the last '}' backwards to handle LLM responses
+    that have prose before the JSON (greedy regex would include that prose).
+    """
+    last_close = text.rfind("}")
+    if last_close == -1:
+        return None
+    depth = 0
+    for i in range(last_close, -1, -1):
+        if text[i] == "}":
+            depth += 1
+        elif text[i] == "{":
+            depth -= 1
+            if depth == 0:
+                return text[i : last_close + 1]
+    return None
+
+
+def extract_json(raw: str) -> str:
+    """Strip markdown fences from an LLM response and return the bare JSON string.
+
+    Models sometimes wrap JSON in ```json...``` or ```...``` blocks. Falls back
+    to brace-matching (last balanced {...} block) to avoid the greedy-regex trap
+    of capturing prose between two unrelated brace pairs.
+
+    Args:
+        raw: Raw LLM response text, possibly wrapped in markdown fences.
+
+    Returns:
+        The JSON string with fences removed.
+    """
+    stripped = raw.strip()
+    # Strip ```json ... ``` or ``` ... ``` fences
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        end = next((i for i, ln in enumerate(lines[1:], 1) if ln.strip() == "```"), len(lines))
+        stripped = "\n".join(lines[1:end]).strip()
+    # Last-resort: find the last balanced {...} block (LLMs typically output JSON last)
+    if not stripped.startswith("{"):
+        found = _find_last_json_object(stripped)
+        if found:
+            stripped = found
+    return stripped
 
 
 def build_feedback_section(
@@ -115,6 +165,19 @@ def get_llm(model: str) -> ChatAnthropic:
         max_tokens=cfg.max_tokens,
         timeout=cfg.llm_timeout_seconds,
     )
+
+
+def _clear_caches() -> None:
+    """Clear all LRU caches (get_llm and get_settings).
+
+    Call this in test teardown when env vars or config change between tests.
+    Key rotation in production also requires a process restart — the cached
+    ChatAnthropic instance holds the API key for the process lifetime.
+    """
+    get_llm.cache_clear()
+    from src.config.settings import get_settings
+
+    get_settings.cache_clear()
 
 
 def call_llm(model: str, system_prompt: str, user_content: str, node_name: str) -> str:

@@ -78,6 +78,13 @@ def main() -> None:
     feature_request = _validate_feature_request(args.feature_request)
 
     from src.graph.graph import graph
+    from src.pipeline import validate_input
+
+    # Apply the same injection/scope guardrails that the Gradio path uses
+    injection_error = validate_input(feature_request)
+    if injection_error:
+        logger.error("pipeline_validation_error", error=injection_error)
+        sys.exit(1)
 
     logger.info("pipeline_start", feature_request_len=len(feature_request))
 
@@ -90,6 +97,9 @@ def main() -> None:
         "final_output": None,
         "status": "running",
         "review_history": [],
+        "spec_review_iteration": 0,
+        "spec_gap_notes": "",
+        "code_fix_acknowledgement": "",
     }
 
     result = graph.invoke(initial_state)
