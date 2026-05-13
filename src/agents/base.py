@@ -128,7 +128,7 @@ def build_feedback_section(
     feedback = state.get("review_feedback")
     if feedback is None:
         return ""
-    issues: list[str] = getattr(feedback, issues_key)
+    issues: list[str] = getattr(feedback, issues_key, [])
     if not issues:
         return ""
     numbered = "\n".join(f"{i}. {issue}" for i, issue in enumerate(issues, 1))

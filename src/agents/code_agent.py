@@ -44,7 +44,7 @@ def _split_acknowledgement(content: str) -> tuple[str, str]:
     # No second '## ' header — extract only bullet/list lines after '## Issues Addressed'
     # (stop at the first blank line after the list to avoid eating implementation prose)
     fallback = re.search(
-        r"^## Issues Addressed\s*\n((?:[ \t]*[-*\d].*\n?)+)",
+        r"^## Issues Addressed\s*\n(.*?)(?:\n\n|\Z)",
         stripped,
         re.DOTALL | re.MULTILINE,
     )

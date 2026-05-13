@@ -18,7 +18,7 @@ import structlog.contextvars
 
 from src.config.constants import MAX_FEATURE_REQUEST_LEN
 from src.config.logging import get_logger
-from src.config.settings import get_settings
+from src.config.settings import OrchestratorConfig, get_settings
 from src.graph.graph import graph as default_graph
 
 logger = get_logger(__name__)
@@ -206,7 +206,7 @@ def _render_iteration_tab(
     for idx, (iteration, content) in enumerate(iterations):
         label = "### Initial Draft" if idx == 0 else f"### Revision {iteration}"
         parts.append(f"{label}\n\n{content}")
-    return "\n\n---\n\n".join(parts) if len(parts) > 1 else "\n".join(parts)
+    return "\n\n---\n\n".join(parts)
 
 
 def _render_spec_tab(spec_iterations: list[tuple[int, str]], model: str) -> str:
@@ -250,7 +250,7 @@ class _StreamState:
     def add_trace(self, agent: str, event: str) -> None:
         self.trace_rows.append((self.elapsed(), agent, event))
 
-    def tabs(self, cfg: Any) -> tuple[str, str, str]:
+    def tabs(self, cfg: OrchestratorConfig) -> tuple[str, str, str]:
         return (
             _render_trace_tab(self.trace_rows, self.review_rows, self.iteration_count),
             _render_spec_tab(self.spec_iterations, cfg.spec_agent_model),
