@@ -39,3 +39,6 @@ docs/             # PRD, specs, status files
 - Each agent uses a dedicated system prompt file under `config/prompts/`
 - Models configurable via env vars — never hardcoded
 - All state transitions typed via `AgentState` TypedDict
+
+## Known Architectural Debt
+- **Single state builder missing:** `initial_state` is constructed independently in both `src/main.py` and `src/pipeline.py`. Any new `AgentState` field must be added in both places or the CLI path will silently omit it. The fix is to extract a shared `_build_initial_state(feature_request)` helper in `src/pipeline.py` and have `main.py` call it. Until that refactor is done, treat both dicts as a single source of truth and always update them together.
