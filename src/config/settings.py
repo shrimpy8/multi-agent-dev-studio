@@ -110,6 +110,22 @@ class OrchestratorConfig(BaseSettings):
             raise ValueError(f"Model name must start with 'claude-', got: {v!r}")
         return v.strip()
 
+    @field_validator("max_tokens")
+    @classmethod
+    def max_tokens_in_range(cls, v: int) -> int:
+        """Reject non-positive or unreasonably large token limits."""
+        if not 1 <= v <= 100_000:
+            raise ValueError(f"max_tokens must be between 1 and 100,000, got {v}")
+        return v
+
+    @field_validator("llm_timeout_seconds")
+    @classmethod
+    def timeout_positive(cls, v: int) -> int:
+        """Reject non-positive timeout values."""
+        if v <= 0:
+            raise ValueError(f"llm_timeout_seconds must be positive, got {v}")
+        return v
+
     @field_validator("max_review_iterations", "max_spec_review_iterations")
     @classmethod
     def iterations_in_range(cls, v: int) -> int:

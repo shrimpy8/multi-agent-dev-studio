@@ -25,7 +25,12 @@ def configure_logging() -> None:
     # Direct env read: logging must be configured before OrchestratorConfig loads
     # (which validates ANTHROPIC_API_KEY), so settings can't be used here.
     log_level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
-    log_level = getattr(logging, log_level_name, logging.INFO)
+    _VALID_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+    if log_level_name not in _VALID_LEVELS:
+        import warnings
+        warnings.warn(f"Unknown LOG_LEVEL={log_level_name!r}, defaulting to INFO")
+        log_level_name = "INFO"
+    log_level = getattr(logging, log_level_name)
 
     logging.basicConfig(
         format="%(message)s",
