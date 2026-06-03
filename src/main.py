@@ -77,6 +77,7 @@ def main() -> None:
     args = _parse_args()
     feature_request = _validate_feature_request(args.feature_request)
 
+    from src.agents.base import _retry_callback
     from src.graph.graph import graph
     from src.pipeline import validate_input
 
@@ -87,6 +88,13 @@ def main() -> None:
         sys.exit(1)
 
     logger.info("pipeline_start", feature_request_len=len(feature_request))
+
+    # Set a CLI retry callback so call_llm emits retry notices to stdout on rate-limit hits.
+    def _on_llm_retry(attempt: int, delay: float) -> None:
+        sys.stdout.write(f"⏳ Rate limit hit, retrying in {delay}s... (attempt {attempt})\n")
+        sys.stdout.flush()
+
+    _retry_callback.set(_on_llm_retry)
 
     initial_state = {
         "feature_request": feature_request,
@@ -100,6 +108,8 @@ def main() -> None:
         "spec_review_iteration": 0,
         "spec_gap_notes": "",
         "code_fix_acknowledgement": "",
+        "llm_calls": 0,
+        "total_input_chars": 0,
     }
 
     result = graph.invoke(initial_state)

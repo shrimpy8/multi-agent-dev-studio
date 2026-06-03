@@ -24,6 +24,8 @@ class AgentState(TypedDict):
             "max_iterations_reached" when the iteration cap is hit.
         review_history: Append-only log of all ReviewFeedback instances across all cycles.
             Uses operator.add so LangGraph merges lists rather than replacing them.
+        llm_calls: Running count of LLM calls made in this pipeline run (budget guard).
+        total_input_chars: Running total of input characters (system + user) sent to LLM (budget guard).
     """
 
     feature_request: str
@@ -37,3 +39,5 @@ class AgentState(TypedDict):
     spec_review_iteration: int
     spec_gap_notes: str
     code_fix_acknowledgement: str
+    llm_calls: int
+    total_input_chars: int

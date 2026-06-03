@@ -39,7 +39,7 @@ _SYNTHESIS_OUTPUT = (
 )
 
 
-def _sub_llm(model: str, system_prompt: str, user_content: str, node_name: str) -> str:
+def _sub_llm(model: str, system_prompt: str, user_content: str, node_name: str, **kwargs: object) -> str:
     if node_name == "spec_agent":
         return "## Feature Spec\nAcceptance criteria here."
     if node_name == "code_agent":
@@ -298,13 +298,14 @@ class TestScenario8MissingApiKey:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 9 — review JSON parse failure: retry once, treated as approved
+# Scenario 9 — review JSON parse failure: retry once, blocks with [P1] issue
 # ---------------------------------------------------------------------------
 
 
 class TestScenario9JsonParseFailure:
     @patch("src.agents.review._call_review_llm")
-    def test_two_json_failures_treated_as_approved(self, mock_review) -> None:
+    def test_two_json_failures_return_blocking_issue(self, mock_review) -> None:
+        """Both parse attempts fail — approved=False with a blocking [P1] issue, not silent approval."""
         from src.state.state import AgentState
 
         mock_review.side_effect = ["not json at all", "also not json"]
@@ -318,10 +319,14 @@ class TestScenario9JsonParseFailure:
             "status": "running",
             "review_history": [],
             "spec_review_iteration": 0,
-            "spec_gap_notes": "", "code_fix_acknowledgement": "",
+            "spec_gap_notes": "",
+            "code_fix_acknowledgement": "",
+            "llm_calls": 0,
+            "total_input_chars": 0,
         }
         result = review(state)
-        assert result["review_feedback"].approved is True
+        assert result["review_feedback"].approved is False
+        assert any("[P1]" in issue for issue in result["review_feedback"].code_issues)
         assert mock_review.call_count == 2
 
     @patch("src.agents.review._call_review_llm")

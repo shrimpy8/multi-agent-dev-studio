@@ -4,7 +4,7 @@ Reads the feature request (and optionally review feedback) from state,
 calls Claude Haiku with the spec prompt, and returns a SubAgentOutput.
 """
 
-from src.agents.base import build_feedback_section, call_llm, load_prompt, sanitize_for_format
+from src.agents.base import build_feedback_section, call_llm, load_prompt
 from src.config.logging import get_logger
 from src.config.settings import get_settings
 from src.state.models import SubAgentOutput
@@ -30,19 +30,36 @@ def spec_agent(state: AgentState) -> AgentState:
     logger.info("spec_agent_start", iteration=iteration)
 
     prompt_template = load_prompt("spec_prompt.txt")
-    feedback_section = build_feedback_section(state, "spec_issues", "spec")
-    system_prompt = prompt_template.format(
-        feature_request=sanitize_for_format(state["feature_request"]),
-        feedback_section=feedback_section,
+    system_prompt = prompt_template
+
+    # Feedback is placed in the user message (not the system prompt) so that
+    # LLM-derived review text cannot override system-level instructions (MADS-02).
+    feedback_block = build_feedback_section(state, "spec_issues", "spec")
+    user_content = (
+        f"<feature_request>\n{state['feature_request']}\n</feature_request>\n\n"
+        f"{feedback_block}"
+        "Generate the spec for the feature request above."
     )
+
+    run_budget: dict[str, int] = {
+        "llm_calls": state.get("llm_calls", 0),
+        "total_input_chars": state.get("total_input_chars", 0),
+        "max_llm_calls": cfg.max_llm_calls_per_run,
+        "max_input_chars": cfg.max_input_chars_per_run,
+    }
 
     content = call_llm(
         model=cfg.spec_agent_model,
         system_prompt=system_prompt,
-        user_content=f"Generate the spec for: {state['feature_request']}",
+        user_content=user_content,
         node_name="spec_agent",
+        run_budget=run_budget,
     )
 
     output = SubAgentOutput(agent_id="spec", content=content, iteration=iteration)
     logger.info("spec_agent_complete", iteration=iteration, content_len=len(content))
-    return {"spec_output": output}
+    return {
+        "spec_output": output,
+        "llm_calls": run_budget["llm_calls"],
+        "total_input_chars": run_budget["total_input_chars"],
+    }
