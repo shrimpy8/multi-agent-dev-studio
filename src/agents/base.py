@@ -6,6 +6,8 @@ for fix cycles, and input sanitization for prompt templates.
 """
 
 import time
+from collections.abc import Callable
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -27,6 +29,14 @@ _PROMPTS_DIR = Path(__file__).parent.parent.parent / "config" / "prompts"
 # worker thread freezes during retries (up to 14s total) but no event-loop deadlock occurs
 # since Gradio runs generators synchronously. An async variant would need asyncio.sleep.
 _RETRY_DELAYS = (2, 4, 8)
+
+# Context variable for a pipeline-level retry notification callback.
+# Set this before invoking the graph to receive retry events from call_llm.
+# The callback signature is (attempt: int, delay_s: float) -> None.
+# Falls back to None (no-op) when not set — safe to call without a pipeline context.
+_retry_callback: ContextVar[Callable[[int, float], None] | None] = ContextVar(
+    "_retry_callback", default=None
+)
 
 
 def load_prompt(filename: str) -> str:
@@ -114,7 +124,11 @@ def build_feedback_section(
     issues_key: Literal["spec_issues", "code_issues"],
     label: str,
 ) -> str:
-    """Build the optional feedback section injected into sub-agent prompts on fix cycles.
+    """Build the optional feedback XML block to append to the user message on fix cycles.
+
+    The returned string is intended for the *user message*, not the system prompt,
+    so that LLM-derived review text cannot override system-level instructions.
+    Callers must append this to ``user_content`` inside a ``<review_feedback>`` block.
 
     Args:
         state: Current graph state, possibly containing review_feedback.
@@ -122,7 +136,7 @@ def build_feedback_section(
         label: Human-readable label for the output type, e.g. ``"spec"`` or ``"implementation"``.
 
     Returns:
-        A formatted feedback string to inject into the prompt, or empty string
+        A ``<review_feedback>`` XML block for the user message, or empty string
         if no relevant issues exist.
     """
     feedback = state.get("review_feedback")
@@ -132,8 +146,8 @@ def build_feedback_section(
     if not issues:
         return ""
     numbered = "\n".join(f"{i}. {issue}" for i, issue in enumerate(issues, 1))
-    return (
-        f"REVIEW FEEDBACK — fix these issues in your revised {label} (highest priority first):\n{numbered}\n\n"
+    inner = (
+        f"Fix these issues in your revised {label} (highest priority first):\n{numbered}\n\n"
         "Rules:\n"
         "- Address every issue above in priority order ([P1] first, then [P2], then [P3])\n"
         "- Begin your response with a '## Issues Addressed' section listing each item you fixed:\n"
@@ -144,6 +158,7 @@ def build_feedback_section(
         "- Then provide the full revised implementation after that section\n"
         "- Do not silently skip any issue — if you cannot fix one, explain why under its number"
     )
+    return f"<review_feedback>\n{inner}\n</review_feedback>\n\n"
 
 
 @lru_cache(maxsize=4)
@@ -180,7 +195,19 @@ def _clear_caches() -> None:
     get_settings.cache_clear()
 
 
-def call_llm(model: str, system_prompt: str, user_content: str, node_name: str) -> str:
+class BudgetExceededError(RuntimeError):
+    """Raised when a per-run LLM call or input-character budget is exhausted."""
+
+
+def call_llm(
+    model: str,
+    system_prompt: str,
+    user_content: str,
+    node_name: str,
+    *,
+    run_budget: "dict[str, int] | None" = None,
+    on_retry: Callable[[int, float], None] | None = None,
+) -> str:
     """Call an Anthropic model and return the text response.
 
     Retries up to 3 times with exponential backoff (2s, 4s, 8s) on HTTP 429
@@ -192,15 +219,61 @@ def call_llm(model: str, system_prompt: str, user_content: str, node_name: str) 
         system_prompt: The system prompt text.
         user_content: The user message content.
         node_name: Caller node name for structured log context.
+        run_budget: Optional mutable dict tracking per-run usage. Expected keys:
+            ``llm_calls`` (int), ``total_input_chars`` (int),
+            ``max_llm_calls`` (int), ``max_input_chars`` (int).
+            Incremented in-place before the call; raises BudgetExceededError
+            if either limit would be exceeded.
+        on_retry: Optional callback invoked before each sleep delay with
+            ``(attempt: int, delay_s: float)``. Use in Gradio to emit trace rows
+            like "⏳ Rate limit hit, retrying in Xs..." without blocking the UI.
 
     Returns:
         The model's text response.
 
     Raises:
+        BudgetExceededError: If ``run_budget`` limits are exceeded before the call.
         anthropic.RateLimitError: If all 3 retries are exhausted on 429.
         anthropic.APIStatusError: If all 3 retries are exhausted on 529, or immediately on other 4xx/5xx.
         anthropic.APIError: Re-raises any non-retryable Anthropic API error after logging.
     """
+    # --- Budget enforcement (MADS-03) ---
+    if run_budget is not None:
+        input_chars = len(system_prompt) + len(user_content)
+        new_calls = run_budget.get("llm_calls", 0) + 1
+        new_chars = run_budget.get("total_input_chars", 0) + input_chars
+        max_calls = run_budget.get("max_llm_calls", 20)
+        max_chars = run_budget.get("max_input_chars", 200_000)
+
+        if new_calls > max_calls:
+            logger.error(
+                "llm_budget_exceeded",
+                node=node_name,
+                reason="max_llm_calls",
+                llm_calls=new_calls,
+                max_llm_calls=max_calls,
+            )
+            raise BudgetExceededError(
+                f"LLM call budget exceeded: {new_calls} calls > limit {max_calls}"
+            )
+        if new_chars > max_chars:
+            logger.error(
+                "llm_budget_exceeded",
+                node=node_name,
+                reason="max_input_chars",
+                total_input_chars=new_chars,
+                max_input_chars=max_chars,
+            )
+            raise BudgetExceededError(
+                f"Input character budget exceeded: {new_chars} chars > limit {max_chars}"
+            )
+
+        run_budget["llm_calls"] = new_calls
+        run_budget["total_input_chars"] = new_chars
+
+    # Resolve the effective retry callback: explicit arg takes priority, then context variable.
+    effective_on_retry = on_retry if on_retry is not None else _retry_callback.get()
+
     llm = get_llm(model)
     messages = [
         SystemMessage(content=system_prompt),
@@ -236,6 +309,8 @@ def call_llm(model: str, system_prompt: str, user_content: str, node_name: str) 
                 )
                 raise
             logger.warning("rate_limit_retry", node=node_name, attempt=attempt, delay_s=delay)
+            if effective_on_retry is not None:
+                effective_on_retry(attempt, delay)
             time.sleep(delay)
         except anthropic.APIStatusError as exc:
             if exc.status_code == 529:  # Overloaded — transient, safe to retry
@@ -250,6 +325,8 @@ def call_llm(model: str, system_prompt: str, user_content: str, node_name: str) 
                     )
                     raise
                 logger.warning("overloaded_retry", node=node_name, attempt=attempt, delay_s=delay)
+                if effective_on_retry is not None:
+                    effective_on_retry(attempt, delay)
                 time.sleep(delay)
             else:
                 latency_ms = int((time.perf_counter() - start) * 1000)

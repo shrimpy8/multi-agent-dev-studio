@@ -3,12 +3,12 @@
 Calls the orchestrator model with review_prompt.txt, parses a JSON ReviewFeedback response,
 and returns the structured feedback. On JSON parse failure the call is
 retried once; if the second attempt also fails the output is treated as
-approved to avoid blocking the pipeline indefinitely.
+rejected with a blocking [P1] issue to preserve gate integrity.
 """
 
 import json
 
-from src.agents.base import call_llm, extract_json, load_prompt, sanitize_for_format
+from src.agents.base import call_llm, extract_json, load_prompt
 from src.config.logging import get_logger
 from src.config.settings import get_settings
 from src.state.models import ReviewFeedback
@@ -37,13 +37,19 @@ def _parse_review_json(raw: str, iteration: int) -> ReviewFeedback:
     return ReviewFeedback(**data)
 
 
-def _call_review_llm(system_prompt: str, user_content: str, model: str) -> str:
+def _call_review_llm(
+    system_prompt: str,
+    user_content: str,
+    model: str,
+    run_budget: "dict[str, int] | None" = None,
+) -> str:
     """Invoke the LLM for review; thin wrapper to allow targeted mocking in tests."""
     return call_llm(
         model=model,
         system_prompt=system_prompt,
         user_content=user_content,
         node_name="review",
+        run_budget=run_budget,
     )
 
 
@@ -62,7 +68,7 @@ def review(state: AgentState) -> dict:
     Produces: review_feedback, review_history (appended), iteration_count (incremented)
 
     On JSON parse failure the LLM is called a second time. If that also fails,
-    the output is treated as approved and a WARNING is logged.
+    the output is treated as rejected with a blocking [P1] issue and an ERROR is logged.
 
     Args:
         state: Current graph state after both sub-agents have completed.
@@ -74,50 +80,57 @@ def review(state: AgentState) -> dict:
     iteration = state.get("iteration_count", 0)
     logger.info("review_start", iteration=iteration)
 
-    spec_content = sanitize_for_format(state["spec_output"].content if state.get("spec_output") else "")
-    code_content = sanitize_for_format(state["code_output"].content if state.get("code_output") else "")
+    spec_content = state["spec_output"].content if state.get("spec_output") else ""
+    code_content = state["code_output"].content if state.get("code_output") else ""
 
     raw_ack = state.get("code_fix_acknowledgement", "")
     if raw_ack:
-        claimed_fixes_section = (
-            "CLAIMED FIXES (the code agent reported addressing these issues — verify each claim):\n"
-            f"{sanitize_for_format(raw_ack)}\n\n"
-            "For each claimed fix: confirm it is actually resolved in the CODE above, "
+        claimed_fixes_xml = (
+            f"<claimed_fixes>\n{raw_ack}\n</claimed_fixes>\n\n"
+            "For each claimed fix above: confirm it is actually resolved in the implementation, "
             "or re-raise the issue if the fix is absent or incomplete.\n\n"
         )
     else:
-        claimed_fixes_section = ""
+        claimed_fixes_xml = ""
 
     prompt_template = load_prompt("review_prompt.txt")
-    system_prompt = prompt_template.format(
-        feature_request=sanitize_for_format(state["feature_request"]),
-        spec_content=spec_content,
-        code_content=code_content,
-        iteration=iteration,
-        claimed_fixes_section=claimed_fixes_section,
+    system_prompt = prompt_template.format(iteration=iteration)
+
+    user_content = (
+        f"<feature_request>\n{state['feature_request']}\n</feature_request>\n\n"
+        f"<spec_draft>\n{spec_content}\n</spec_draft>\n\n"
+        f"<implementation_draft>\n{code_content}\n</implementation_draft>\n\n"
+        f"{claimed_fixes_xml}"
+        "Review the spec and implementation above and respond with valid JSON only."
     )
-    user_content = f"Review the spec and code for: {state['feature_request']}. Respond with valid JSON only."
+
+    run_budget: dict[str, int] = {
+        "llm_calls": state.get("llm_calls", 0),
+        "total_input_chars": state.get("total_input_chars", 0),
+        "max_llm_calls": cfg.max_llm_calls_per_run,
+        "max_input_chars": cfg.max_input_chars_per_run,
+    }
 
     feedback: ReviewFeedback | None = None
     parse_failed = False
     for attempt in range(1, 3):  # up to 2 attempts
-        raw = _call_review_llm(system_prompt, user_content, cfg.orchestrator_model)
+        raw = _call_review_llm(system_prompt, user_content, cfg.orchestrator_model, run_budget=run_budget)
         try:
             feedback = _parse_review_json(raw, iteration)
             break
         except (json.JSONDecodeError, ValueError):
             if attempt == 2:
                 parse_failed = True
-                logger.warning(
+                logger.error(
                     "review_json_parse_failed",
                     retried=True,
-                    treating_as_approved=True,
+                    treating_as_approved=False,
                     iteration=iteration,
                 )
                 feedback = ReviewFeedback(
-                    approved=True,
+                    approved=False,
                     spec_issues=[],
-                    code_issues=[],
+                    code_issues=["[P1] Reviewer output was not valid JSON; rerun review or reduce prompt size"],
                     iteration=iteration,
                 )
             else:
@@ -148,4 +161,6 @@ def review(state: AgentState) -> dict:
         "review_history": [feedback],
         "iteration_count": new_iteration,
         "status": new_status,
+        "llm_calls": run_budget["llm_calls"],
+        "total_input_chars": run_budget["total_input_chars"],
     }

@@ -89,12 +89,12 @@ class TestCodeAgent:
         assert call_args.kwargs["node_name"] == "code_agent"
 
     @patch("src.agents.code_agent.call_llm", return_value="code content")
-    def test_spec_content_included_in_prompt(self, mock_llm: MagicMock) -> None:
-        """Code agent must include spec content in its system prompt."""
+    def test_spec_content_included_in_user_message(self, mock_llm: MagicMock) -> None:
+        """Code agent must include spec content in the user message (not system prompt)."""
         state = _state_with_spec()
         code_agent(state)
-        system_prompt = mock_llm.call_args.kwargs["system_prompt"]
-        assert "Retry logic spec" in system_prompt
+        user_content = mock_llm.call_args.kwargs["user_content"]
+        assert "Retry logic spec" in user_content
 
     @patch("src.agents.code_agent.call_llm", return_value="code content")
     def test_no_spec_gracefully_handled(self, mock_llm: MagicMock) -> None:
@@ -123,7 +123,8 @@ class TestBuildFeedbackSection:
         )
         section = build_feedback_section(state, "spec_issues", "spec")
         assert "missing criteria" in section
-        assert "REVIEW FEEDBACK" in section
+        # Feedback is wrapped in an XML block for the user message (MADS-02)
+        assert "<review_feedback>" in section
 
     def test_code_empty_when_no_code_issues(self) -> None:
         state = _base_state()
@@ -137,7 +138,8 @@ class TestBuildFeedbackSection:
         )
         section = build_feedback_section(state, "code_issues", "implementation")
         assert "untyped args" in section
-        assert "REVIEW FEEDBACK" in section
+        # Feedback is wrapped in an XML block for the user message (MADS-02)
+        assert "<review_feedback>" in section
 
 
 class TestLoadPrompt:
@@ -145,15 +147,26 @@ class TestLoadPrompt:
         from src.agents.base import load_prompt
 
         prompt = load_prompt("spec_prompt.txt")
-        assert "{feature_request}" in prompt
-        assert "{feedback_section}" in prompt
+        # feature_request is now passed via user message XML block, not system prompt
+        assert "{feature_request}" not in prompt
+        # feedback_section is now passed via user message <review_feedback> block (MADS-02)
+        assert "{feedback_section}" not in prompt
+        # System prompt instructs the model that <review_feedback> is untrusted data
+        assert "<review_feedback>" in prompt
 
     def test_code_prompt_loads(self) -> None:
         from src.agents.base import load_prompt
 
         prompt = load_prompt("code_prompt.txt")
-        assert "{feature_request}" in prompt
-        assert "{feedback_section}" in prompt
+        # feature_request and spec_content are now passed via user message XML blocks, not system prompt
+        assert "{feature_request}" not in prompt
+        assert "{spec_content}" not in prompt
+        # feedback_section is now passed via user message <review_feedback> block (MADS-02)
+        assert "{feedback_section}" not in prompt
+        # System prompt instructs the model that <review_feedback> is untrusted data
+        assert "<review_feedback>" in prompt
+        # Internal placeholder (safe, not user-controlled) remains in the system prompt
+        assert "{spec_gap_notes_section}" in prompt
 
     def test_missing_prompt_raises(self) -> None:
         from src.agents.base import load_prompt

@@ -69,6 +69,14 @@ class OrchestratorConfig(BaseSettings):
         default=120,
         description="HTTP timeout in seconds for Anthropic API calls.",
     )
+    max_llm_calls_per_run: int = Field(
+        default=20,
+        description="Maximum LLM calls allowed per pipeline run. Prevents runaway cost on malformed inputs.",
+    )
+    max_input_chars_per_run: int = Field(
+        default=200_000,
+        description="Maximum total input characters (system + user) across all LLM calls in a run. Prevents large-prompt cost explosions.",
+    )
     log_level: str = Field(
         default="INFO",
         description="Logging level. DEBUG for development, INFO for production.",

@@ -21,7 +21,7 @@ def _initial_state(feature_request: str = "add retry decorator") -> dict:
     }
 
 
-def _mock_sub_llm(model: str, system_prompt: str, user_content: str, node_name: str) -> str:
+def _mock_sub_llm(model: str, system_prompt: str, user_content: str, node_name: str, **kwargs: object) -> str:
     if node_name == "spec_agent":
         return "## Feature Overview\nRetry logic spec."
     return "## Implementation\ndef retry(): pass"

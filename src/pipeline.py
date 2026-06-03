@@ -16,6 +16,7 @@ from typing import Any
 import anthropic
 import structlog.contextvars
 
+from src.agents.base import _retry_callback
 from src.config.constants import MAX_FEATURE_REQUEST_LEN
 from src.config.logging import get_logger
 from src.config.settings import OrchestratorConfig, get_settings
@@ -23,7 +24,11 @@ from src.graph.graph import graph as default_graph
 
 logger = get_logger(__name__)
 
-# Phrases that indicate prompt injection attempts
+# Phrases that indicate out-of-scope instruction patterns.
+# This denylist is UX-level validation only — it rejects the most obvious misuse patterns
+# (e.g. copy-pasted jailbreaks, explicit instruction overrides) to give users clear feedback.
+# It is NOT a security boundary and is not sufficient to prevent prompt injection on its own.
+# Prompt separation (MADS-02) is the primary injection defence.
 _INJECTION_PATTERNS: tuple[str, ...] = (
     "ignore previous",
     "ignore your instructions",
@@ -64,13 +69,34 @@ _SCOPE_PATTERNS: tuple[str, ...] = (
 # ---------------------------------------------------------------------------
 
 
+def _normalize_for_denylist(text: str) -> str:
+    """Normalize input text for denylist matching.
+
+    Collapses whitespace runs to a single space, strips leading/trailing punctuation
+    from each word, and lowercases. This catches simple bypasses like extra spaces
+    or wrapping punctuation but is not exhaustive.
+
+    Args:
+        text: Raw input string.
+
+    Returns:
+        Normalized string for denylist comparison.
+    """
+    # Collapse whitespace and lowercase
+    collapsed = re.sub(r"\s+", " ", text).lower()
+    # Strip leading/trailing punctuation from each token to catch "ignore.previous" etc.
+    tokens = [token.strip(".,;:!?\"'()[]{}") for token in collapsed.split(" ")]
+    return " ".join(tokens)
+
+
 def validate_input(text: str) -> str | None:
     """Return an error message if the input is invalid, else None.
 
     Checks (in order):
     1. Non-empty
     2. Length within limit
-    3. No prompt injection patterns
+    3. Rejects common out-of-scope instruction patterns (UX-level validation only —
+       not a security boundary; see _INJECTION_PATTERNS docstring)
     4. Scope is focused (not a full-application request)
     """
     if not text or not text.strip():
@@ -78,17 +104,18 @@ def validate_input(text: str) -> str | None:
     if len(text) > MAX_FEATURE_REQUEST_LEN:
         return f"Feature request must be between 1 and {MAX_FEATURE_REQUEST_LEN} characters (got {len(text)})."
 
-    lower = text.lower()
+    # Normalize before denylist check to reduce trivial bypasses
+    normalized = _normalize_for_denylist(text)
 
     for pattern in _INJECTION_PATTERNS:
-        if pattern in lower:
+        if pattern in normalized:
             return (
                 "Your request appears to contain instructions unrelated to building a feature. "
                 "Please describe only the Python or HTML/JS feature you want to create."
             )
 
     for pattern in _SCOPE_PATTERNS:
-        if re.search(pattern, lower):
+        if re.search(pattern, normalized):
             return (
                 "This tool generates focused, self-contained Python modules or HTML/JS components — "
                 "not full applications. Please describe one specific feature "
@@ -411,6 +438,13 @@ def run_pipeline(
     trace_md, spec_md, code_md = ss.tabs(cfg)
     yield (_status_md("Running pipeline…"), f"## Feature: {feature_request}", trace_md, spec_md, code_md, "")
 
+    # Set a pipeline-level retry callback so call_llm can append trace rows on rate-limit retries.
+    # The ContextVar is inherited by the same thread that runs graph.stream() synchronously.
+    def _on_llm_retry(attempt: int, delay: float) -> None:
+        ss.add_trace("Pipeline", f"⏳ Rate limit hit, retrying in {delay}s... (attempt {attempt})")
+
+    _retry_callback.set(_on_llm_retry)
+
     initial_state = {
         "feature_request": feature_request,
         "spec_output": None,
@@ -421,7 +455,10 @@ def run_pipeline(
         "status": "running",
         "review_history": [],
         "spec_review_iteration": 0,
-        "spec_gap_notes": "", "code_fix_acknowledgement": "",
+        "spec_gap_notes": "",
+        "code_fix_acknowledgement": "",
+        "llm_calls": 0,
+        "total_input_chars": 0,
     }
 
     _handlers: dict[str, Any] = {

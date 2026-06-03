@@ -59,7 +59,7 @@ def _base_state(
 _APPROVED_SPEC_REVIEW = json.dumps({"approved": True, "issues": [], "iteration": 0})
 
 
-def _mock_llm_response(model: str, system_prompt: str, user_content: str, node_name: str) -> str:
+def _mock_llm_response(model: str, system_prompt: str, user_content: str, node_name: str, **kwargs: object) -> str:
     if node_name == "spec_agent":
         return "## Spec"
     if node_name == "code_agent":
@@ -182,11 +182,13 @@ class TestReviewNode:
         assert isinstance(result["review_history"][0], ReviewFeedback)
 
     @patch("src.agents.review._call_review_llm")
-    def test_json_failure_retries_once_then_approves(self, mock_llm: MagicMock) -> None:
+    def test_json_failure_retries_once_then_blocks(self, mock_llm: MagicMock) -> None:
+        """Both parse attempts fail — should return approved=False with a blocking [P1] issue."""
         mock_llm.side_effect = ["not json", "also not json"]
         result = review(_base_state())
         assert mock_llm.call_count == 2
-        assert result["review_feedback"].approved is True
+        assert result["review_feedback"].approved is False
+        assert any("[P1]" in issue for issue in result["review_feedback"].code_issues)
 
     @patch("src.agents.review._call_review_llm")
     def test_json_failure_first_attempt_succeeds_on_retry(self, mock_llm: MagicMock) -> None:
@@ -298,12 +300,20 @@ class TestSpecReviewNode:
         assert cmd.update["review_feedback"].spec_issues == ["missing criteria"]
 
     @patch("src.agents.spec_review._call_spec_review_llm")
-    def test_json_parse_failure_treats_as_approved(self, mock_llm: MagicMock) -> None:
+    def test_json_parse_failure_blocks_with_p1_issue(self, mock_llm: MagicMock) -> None:
+        """Both parse attempts fail — should return approved=False with a blocking [P1] issue.
+
+        With spec_review_iteration=0 < max_spec_review_iterations=1, the node routes back
+        to spec_agent (retries remain) carrying the parse-failure issue as feedback.
+        """
         mock_llm.side_effect = ["not json", "also not json"]
         state = _base_state()
         cmd = spec_review(state)
-        assert cmd.goto == "code_agent"
         assert mock_llm.call_count == 2
+        # parse failure is not approved — routes back to spec_agent since budget not exhausted
+        assert cmd.goto == "spec_agent"
+        assert cmd.update["review_feedback"].approved is False
+        assert any("[P1]" in issue for issue in cmd.update["review_feedback"].spec_issues)
 
     def test_parse_spec_review_json_valid(self) -> None:
         raw = json.dumps({"approved": False, "issues": ["missing overview"], "iteration": 0})

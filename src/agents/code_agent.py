@@ -79,7 +79,6 @@ def code_agent(state: AgentState) -> AgentState:
     logger.info("code_agent_start", iteration=iteration)
 
     spec_output = state.get("spec_output")
-    spec_content = sanitize_for_format(spec_output.content) if spec_output else ""
 
     spec_gap_notes = state.get("spec_gap_notes", "")
     spec_gap_notes_section = (
@@ -90,19 +89,34 @@ def code_agent(state: AgentState) -> AgentState:
     )
 
     prompt_template = load_prompt("code_prompt.txt")
-    feedback_section = build_feedback_section(state, "code_issues", "implementation")
     system_prompt = prompt_template.format(
-        feature_request=sanitize_for_format(state["feature_request"]),
-        spec_content=spec_content,
         spec_gap_notes_section=spec_gap_notes_section,
-        feedback_section=feedback_section,
     )
+
+    # Feedback is placed in the user message (not the system prompt) so that
+    # LLM-derived review text cannot override system-level instructions (MADS-02).
+    feedback_block = build_feedback_section(state, "code_issues", "implementation")
+    spec_raw = spec_output.content if spec_output else ""
+    user_content = (
+        f"<feature_request>\n{state['feature_request']}\n</feature_request>\n\n"
+        f"<spec_draft>\n{spec_raw}\n</spec_draft>\n\n"
+        f"{feedback_block}"
+        "Generate the implementation for the feature request and spec above."
+    )
+
+    run_budget: dict[str, int] = {
+        "llm_calls": state.get("llm_calls", 0),
+        "total_input_chars": state.get("total_input_chars", 0),
+        "max_llm_calls": cfg.max_llm_calls_per_run,
+        "max_input_chars": cfg.max_input_chars_per_run,
+    }
 
     raw = call_llm(
         model=cfg.code_agent_model,
         system_prompt=system_prompt,
-        user_content=f"Generate the implementation for: {state['feature_request']}",
+        user_content=user_content,
         node_name="code_agent",
+        run_budget=run_budget,
     )
 
     acknowledgement, implementation = _split_acknowledgement(raw)
@@ -111,4 +125,9 @@ def code_agent(state: AgentState) -> AgentState:
 
     output = SubAgentOutput(agent_id="code", content=implementation, iteration=iteration)
     logger.info("code_agent_complete", iteration=iteration, content_len=len(implementation))
-    return {"code_output": output, "code_fix_acknowledgement": acknowledgement}
+    return {
+        "code_output": output,
+        "code_fix_acknowledgement": acknowledgement,
+        "llm_calls": run_budget["llm_calls"],
+        "total_input_chars": run_budget["total_input_chars"],
+    }
