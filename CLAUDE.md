@@ -1,5 +1,7 @@
 # CLAUDE.md — multi-agent-dev-studio
 
+> **Scope:** project-specific decisions, invariants, and gotchas only. General engineering, security, language, and testing standards are handled globally and are not restated here.
+
 ## Stack
 - Python 3.11+
 - LangGraph 0.2+ (state graph, sequential pipeline with spec gate)
